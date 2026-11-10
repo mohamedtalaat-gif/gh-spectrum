@@ -52,6 +52,30 @@ export function monthTicks({ year, dates, through }) {
 export const MIN_SLOTS = 13;
 export const slotX = (i, n, lo, hi) => lo + (i / (Math.max(n, MIN_SLOTS) - 1)) * (hi - lo);
 
+/** The scrolling spectrum gives every week the same width, so the year can be longer than the card and is moved sideways. */
+export const WEEK_PX = 26;
+export const SPEC_PAD = 28;
+export const weekX = (i) => SPEC_PAD + i * WEEK_PX;
+export const spectrumWidth = (n) => SPEC_PAD * 2 + Math.max(n - 1, 0) * WEEK_PX;
+
+/**
+ * A turn of the mouse wheel (vertical) over the spectrum moves it sideways. Returns the new scroll position, or null when the
+ * wheel should do what it normally does: sideways gestures already scroll the element, and at either end the page scrolls on.
+ */
+export function wheelScroll({ deltaX = 0, deltaY = 0, deltaMode = 0, scrollLeft, max }) {
+  if (!(max > 0) || Math.abs(deltaX) >= Math.abs(deltaY)) return null;
+  const unit = deltaMode === 1 ? 16 : deltaMode === 2 ? 400 : 1; // pixels, lines, pages
+  const next = Math.min(max, Math.max(0, scrollLeft + deltaY * unit));
+  return next === scrollLeft ? null : next;
+}
+
+/** Keys on the focused spectrum: the arrows move a few weeks, Page Up and Page Down most of a screen, Home and End go to the ends. */
+export function keyScroll(key, { scrollLeft, max, page }) {
+  const step = WEEK_PX * 4;
+  const to = { ArrowLeft: scrollLeft - step, ArrowRight: scrollLeft + step, PageUp: scrollLeft - page * 0.8, PageDown: scrollLeft + page * 0.8, Home: 0, End: max }[key];
+  return to === undefined ? null : Math.min(max, Math.max(0, to));
+}
+
 /** Radius of a repository atom: grows with the square root of recent commits and stars. */
 export const atomRadius = (rep) => 13 + Math.sqrt(rep.commits * 1.6 + rep.stars * 6 + 1) * 3.4;
 

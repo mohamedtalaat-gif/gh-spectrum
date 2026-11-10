@@ -1,6 +1,6 @@
 {
   "name": "gh-spectrum",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "A GitHub activity card drawn like an analytical spectrum: a spectrum of commits for the year so far, repositories as atoms. A web component and a static SVG for profile READMEs.",
   "type": "module",
   "main": "src/gh-spectrum.js",

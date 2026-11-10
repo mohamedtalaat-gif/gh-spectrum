@@ -1,11 +1,12 @@
 /*!
  * gh-spectrum: a GitHub activity card drawn like an analytical spectrum.
- * Commits per week are stick peaks along the year so far (like a mass spectrum, base peak labelled);
+ * Commits per week are stick peaks along the year so far (like a mass spectrum, base peak labelled); the spectrum scrolls
+ * sideways through the months with the wheel, a drag or the arrow keys;
  * repositories are atoms sized by recent activity and coloured by language, bonded by shared language.
  * No dependencies. Data come from the public GitHub REST API in the visitor's browser and are cached for an hour.
  * MIT licence.
  */
-import { colourFor, esc, layoutAtoms, monthTicks, slotX } from './core.js';
+import { colourFor, esc, layoutAtoms, monthTicks, weekX, spectrumWidth, WEEK_PX, wheelScroll, keyScroll } from './core.js';
 import { fetchActivity } from './data.js';
 
 const TTL = 60 * 60 * 1000;
@@ -39,7 +40,11 @@ svg text { font-family: inherit; font-size: 11px; fill: var(--ghs-muted, #93a3ba
 .peak.on { stroke: var(--ghs-hot, #f08a4b); stroke-width: 3; }
 .cap { fill: var(--ghs-accent, #5b8dff); }
 .cap.on { fill: var(--ghs-hot, #f08a4b); }
-.hit { fill: transparent; cursor: crosshair; }
+.spec { overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; cursor: grab; scrollbar-width: thin; scrollbar-color: var(--ghs-rule, #2a3547) transparent; border-radius: 4px; }
+.spec.drag { cursor: grabbing; user-select: none; }
+.spec:focus-visible { outline: 2px solid var(--ghs-accent, #5b8dff); outline-offset: 2px; }
+.spec svg { max-width: none; overflow: visible; }
+.hit { fill: transparent; cursor: inherit; }
 .atom { cursor: pointer; transition: opacity 0.2s, transform 0.2s; transform-box: fill-box; transform-origin: center; }
 .atom:hover, .atom:focus { transform: scale(1.08); outline: none; }
 .atom.dim { opacity: 0.18; }
@@ -80,19 +85,24 @@ class GhActivity extends HTMLElement {
     const stars = d.repos.reduce((a, r) => a + r.stars, 0);
 
     // spectrum
-    const W = 720, H = 170, L = 8, B = 26, T = 22;
+    // Every week has the same width, so the year can be wider than the card; the card scrolls it sideways.
+    const H = 170, B = 26, T = 22;
     const n = d.weeks.length;
-    const x = (i) => slotX(i, n, L + 6, W - L - 6);
+    const W = spectrumWidth(n);
+    const x = weekX;
     const y = (v) => H - B - (v / peak) * (H - B - T);
-    let sp = `<line class="axis" x1="${L}" x2="${W - L}" y1="${H - B}" y2="${H - B}"/>`;
+    let sp = `<line class="axis" x1="0" x2="${W}" y1="${H - B}" y2="${H - B}"/>`;
     const ticks = monthTicks(d);
-    ticks.forEach((t) => { sp += `<line class="axis" x1="${x(t.i)}" x2="${x(t.i)}" y1="${H - B}" y2="${H - B + 4}"/><text x="${x(t.i)}" y="${H - 8}" text-anchor="${t.i < 1 ? 'start' : 'middle'}">${esc(t.label)}</text>`; });
+    ticks.forEach((t) => { sp += `<line class="axis" x1="${x(t.i)}" x2="${x(t.i)}" y1="${H - B}" y2="${H - B + 4}"/><text x="${x(t.i)}" y="${H - 8}" text-anchor="middle">${esc(t.label)}</text>`; });
     if (!ticks.length || x(n - 1) - x(ticks.at(-1).i) > 40) sp += `<text x="${x(n - 1)}" y="${H - 8}" text-anchor="end">now</text>`;
     d.weeks.forEach((v, i) => {
       if (v > 0) sp += `<line class="peak" data-i="${i}" x1="${x(i)}" x2="${x(i)}" y1="${H - B}" y2="${y(v)}"/><circle class="cap" data-i="${i}" cx="${x(i)}" cy="${y(v)}" r="2.6"/>`;
-      sp += `<rect class="hit" data-i="${i}" x="${x(i) - 5}" y="${T - 6}" width="10" height="${H - B - T + 6}"/>`;
+      sp += `<rect class="hit" data-i="${i}" x="${x(i) - WEEK_PX / 2}" y="${T - 6}" width="${WEEK_PX}" height="${H - B - T + 6}"/>`;
     });
-    if (total) sp += `<text x="${x(bi)}" y="${y(peak) - 8}" text-anchor="middle" style="fill:var(--ghs-text,#e1e8f2)">base peak: ${peak}</text>`;
+    if (total) {
+      const bx = x(bi), edge = bx > W - 70 ? 'end' : bx < 70 ? 'start' : 'middle'; // keep the label inside the picture
+      sp += `<text x="${edge === 'end' ? bx + 6 : edge === 'start' ? bx - 6 : bx}" y="${y(peak) - 8}" text-anchor="${edge}" style="fill:var(--ghs-text,#e1e8f2)">base peak: ${peak}</text>`;
+    }
 
     // atoms: spiral placement by size, bonds between repositories that share a language
     const AW = 720, AH = 230;
@@ -109,13 +119,44 @@ class GhActivity extends HTMLElement {
       <header><a href="https://github.com/${esc(d.user)}">github.com/${esc(d.user)}</a>
         <span class="totals">${this.show.includes('commits') ? `<span><strong>${total}</strong> commits in ${d.year}</span>` : ''}${this.show.includes('repos') ? `<span><strong>${d.repos.length}</strong> repositories</span>` : ''}${this.show.includes('stars') ? `<span><strong>${stars}</strong> stars</span>` : ''}</span></header>
       <h4>Spectrum of Commits</h4>
-      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Commits per week in ${d.year}. Base peak ${peak} in the week of ${esc(d.dates[bi])}."><title>Commits in ${d.year}</title>${sp}</svg>
+      <div class="spec" tabindex="0" role="group" aria-label="Spectrum of Commits; use the arrow keys, the wheel or a drag to move through the months">
+        <svg viewBox="0 0 ${W} ${H}" style="width:${W}px" role="img" aria-label="Commits per week in ${d.year}. Base peak ${peak} in the week of ${esc(d.dates[bi])}."><title>Commits in ${d.year}</title>${sp}</svg>
+      </div>
       <span class="sr">${esc(alt)}</span>
       <h4>Repositories as atoms</h4>
       <svg viewBox="0 0 ${AW} ${AH}" role="group" aria-label="Repositories; radius grows with recent commits and stars">${at}</svg>
       <div class="chips" role="group" aria-label="Filter by language">${langs.map((l) => `<button type="button" class="chip" aria-pressed="false" data-l="${esc(l)}"><i style="background:${colour(l)}"></i>${esc(l)}</button>`).join('')}</div>
-      <div class="tip" aria-live="polite">Hover a peak or an atom.</div>
+      <div class="tip" aria-live="polite">Hover a peak or an atom. Scroll or drag the spectrum to move through the months.</div>
       <p class="note">Data: GitHub REST API, requested by your browser and cached for an hour. Radius reflects commits in ${d.year} plus stars; bonds join repositories that share a language.</p>`;
+
+    // The spectrum starts at the present and moves sideways: wheel, drag with the mouse, swipe, or the arrow keys when focused.
+    const spec = this.root.querySelector('.spec');
+    const toNow = () => { spec.scrollLeft = spec.scrollWidth; };
+    toNow();
+    requestAnimationFrame(toNow);
+    spec.addEventListener('wheel', (e) => {
+      const next = wheelScroll({ deltaX: e.deltaX, deltaY: e.deltaY, deltaMode: e.deltaMode, scrollLeft: spec.scrollLeft, max: spec.scrollWidth - spec.clientWidth });
+      if (next === null) return; // at an end, or a sideways gesture: the browser does the rest
+      e.preventDefault();
+      spec.scrollLeft = next;
+    }, { passive: false });
+    spec.addEventListener('keydown', (e) => {
+      const next = keyScroll(e.key, { scrollLeft: spec.scrollLeft, max: spec.scrollWidth - spec.clientWidth, page: spec.clientWidth });
+      if (next === null) return;
+      e.preventDefault();
+      spec.scrollLeft = next;
+    });
+    let drag = null;
+    spec.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse' && e.button === 0) drag = { x: e.clientX, left: spec.scrollLeft, moved: false }; });
+    spec.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      const dx = e.clientX - drag.x;
+      if (!drag.moved && Math.abs(dx) < 4) return; // a click or a hover is not a drag
+      if (!drag.moved) { drag.moved = true; spec.classList.add('drag'); spec.setPointerCapture(e.pointerId); }
+      spec.scrollLeft = drag.left - dx;
+    });
+    const endDrag = () => { if (drag?.moved) spec.classList.remove('drag'); drag = null; };
+    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach((t) => spec.addEventListener(t, endDrag));
 
     const tip = this.root.querySelector('.tip');
     const setPeak = (i) => {
