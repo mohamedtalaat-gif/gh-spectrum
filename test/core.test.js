@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { yearGrid, binCommits, monthTicks, slotX, weekX, spectrumWidth, wheelScroll, keyScroll, weekAt, WEEK_PX, SPEC_PAD, layoutAtoms, atomRadius, colourFor, esc, WEEK } from '../src/core.js';
+import { yearGrid, binCommits, monthTicks, slotX, weekX, spectrumWidth, wheelScroll, keyScroll, weekAt, flagLeft, weekStart, WEEK_PX, SPEC_PAD, layoutAtoms, atomRadius, colourFor, esc, WEEK } from '../src/core.js';
 
 test('yearGrid starts in the week of 1 January and ends in the week of today', () => {
   const g = yearGrid(new Date('2026-11-10T15:00:00Z')); // a Tuesday; 1 January 2026 was a Thursday
@@ -91,6 +91,25 @@ test('the week under the pointer follows its position and the scroll position', 
   assert.equal(at(100 + weekX(0) - 400, 400), 0);
   assert.equal(at(100 - 300, 0), null); // left of the first week
   assert.equal(weekAt({ x: 100 + weekX(46), left: 100, scrollLeft: 0, n: 46 }), null); // after the last week
+});
+
+test('the label of the week is centred on it and kept inside the visible part', () => {
+  const f = (center, width = 200) => flagLeft({ center, width, from: 100, to: 700 });
+  assert.equal(f(400), 300); // centred
+  assert.equal(f(120), 104); // near the left edge: kept inside, with a margin
+  assert.equal(f(690), 496); // near the right edge: ends 4 px before it
+  assert.equal(flagLeft({ center: 50, width: 900, from: 100, to: 700 }), 104); // wider than the view: starts at the left
+});
+
+test('the first week of the year is named by 1 January, the others by their Sunday', () => {
+  const g = yearGrid(new Date('2026-11-10T15:00:00Z'));
+  const d = { year: g.year, dates: g.dates };
+  assert.equal(g.dates[0], '2025-12-28');
+  assert.equal(weekStart(d, 0), '2026-01-01');
+  assert.equal(weekStart(d, 1), '2026-01-04');
+  assert.equal(weekStart(d, g.weeks - 1), '2026-11-08');
+  const sunday = yearGrid(new Date('2023-03-01T00:00:00Z')); // a year that starts on a Sunday
+  assert.equal(weekStart({ year: 2023, dates: sunday.dates }, 0), '2023-01-01');
 });
 
 test('atoms never overlap and grow with commits and stars', () => {

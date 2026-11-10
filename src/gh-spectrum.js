@@ -6,7 +6,7 @@
  * No dependencies. Data come from the public GitHub REST API in the visitor's browser and are cached for an hour.
  * MIT licence.
  */
-import { colourFor, esc, layoutAtoms, monthTicks, weekX, spectrumWidth, WEEK_PX, wheelScroll, keyScroll, weekAt } from './core.js';
+import { colourFor, esc, layoutAtoms, monthTicks, weekX, spectrumWidth, WEEK_PX, wheelScroll, keyScroll, weekAt, flagLeft, weekStart } from './core.js';
 import { fetchActivity } from './data.js';
 
 const TTL = 60 * 60 * 1000;
@@ -44,6 +44,10 @@ svg text { font-family: inherit; font-size: 11px; fill: var(--ghs-muted, #93a3ba
 .spec.drag { cursor: grabbing; user-select: none; }
 .spec:focus-visible { outline: 2px solid var(--ghs-accent, #5b8dff); outline-offset: 2px; }
 .spec svg { max-width: none; overflow: visible; }
+.band { fill: var(--ghs-accent, #5b8dff); fill-opacity: 0.14; pointer-events: none; }
+.flag { pointer-events: none; }
+.flag rect { fill: var(--ghs-flag-bg, var(--ghs-bg, #0e131c)); stroke: var(--ghs-hot, #f08a4b); stroke-width: 1; }
+.flag text { fill: var(--ghs-text, #e1e8f2); font-size: 12px; }
 .atom { cursor: pointer; transition: opacity 0.2s, transform 0.2s; transform-box: fill-box; transform-origin: center; }
 .atom:hover, .atom:focus { transform: scale(1.08); outline: none; }
 .atom.dim { opacity: 0.18; }
@@ -85,12 +89,12 @@ class GhActivity extends HTMLElement {
 
     // spectrum
     // Every week has the same width, so the year can be wider than the card; the card scrolls it sideways.
-    const H = 170, B = 26, T = 22;
+    const H = 170, B = 26, T = 34;
     const n = d.weeks.length;
     const W = spectrumWidth(n);
     const x = weekX;
     const y = (v) => H - B - (v / peak) * (H - B - T);
-    let sp = `<line class="axis" x1="0" x2="${W}" y1="${H - B}" y2="${H - B}"/>`;
+    let sp = `<rect class="band" opacity="0" x="0" y="${T - 12}" width="${WEEK_PX}" height="${H - B - T + 12}"/><line class="axis" x1="0" x2="${W}" y1="${H - B}" y2="${H - B}"/>`;
     const ticks = monthTicks(d);
     ticks.forEach((t) => { sp += `<line class="axis" x1="${x(t.i)}" x2="${x(t.i)}" y1="${H - B}" y2="${H - B + 4}"/><text x="${x(t.i)}" y="${H - 8}" text-anchor="middle">${esc(t.label)}</text>`; });
     if (!ticks.length || x(n - 1) - x(ticks.at(-1).i) > 40) sp += `<text x="${x(n - 1)}" y="${H - 8}" text-anchor="end">now</text>`;
@@ -99,8 +103,9 @@ class GhActivity extends HTMLElement {
     });
     if (total) {
       const bx = x(bi), edge = bx > W - 70 ? 'end' : bx < 70 ? 'start' : 'middle'; // keep the label inside the picture
-      sp += `<text x="${edge === 'end' ? bx + 6 : edge === 'start' ? bx - 6 : bx}" y="${y(peak) - 8}" text-anchor="${edge}" style="fill:var(--ghs-text,#e1e8f2)">base peak: ${peak}</text>`;
+      sp += `<text class="base" x="${edge === 'end' ? bx + 6 : edge === 'start' ? bx - 6 : bx}" y="${y(peak) - 8}" text-anchor="${edge}" style="fill:var(--ghs-text,#e1e8f2)">base peak: ${peak}</text>`;
     }
+    sp += `<g class="flag" opacity="0"><rect x="0" y="1" width="10" height="22" rx="4"/><text x="0" y="16"></text></g>`;
 
     // atoms: spiral placement by size, bonds between repositories that share a language
     const AW = 720, AH = 230;
@@ -112,13 +117,13 @@ class GhActivity extends HTMLElement {
       at += `<g class="atom" tabindex="0" role="link" data-l="${esc(p.rep.language)}" data-n="${esc(p.rep.name)}"><circle cx="${p.x}" cy="${p.y}" r="${p.r}" fill="${c}" fill-opacity="0.22" stroke="${c}" stroke-width="2"/><text x="${p.x}" y="${p.y + 4}" text-anchor="middle" style="fill:var(--ghs-text,#e1e8f2);font-size:${Math.max(9, Math.min(12, p.r / 3.1))}px">${esc(p.rep.name.length > 14 ? p.rep.name.slice(0, 13) + '…' : p.rep.name)}</text></g>`;
     });
 
-    const alt = d.weeks.map((v, i) => `${d.dates[i]}: ${v}`).join('; ');
+    const alt = d.weeks.map((v, i) => `${weekStart(d, i)}: ${v}`).join('; ');
     this.root.querySelector('.card').innerHTML = `
       <header><a href="https://github.com/${esc(d.user)}">github.com/${esc(d.user)}</a>
         <span class="totals">${this.show.includes('commits') ? `<span><strong>${total}</strong> commits in ${d.year}</span>` : ''}${this.show.includes('repos') ? `<span><strong>${d.repos.length}</strong> repositories</span>` : ''}${this.show.includes('stars') ? `<span><strong>${stars}</strong> stars</span>` : ''}</span></header>
       <h4>Spectrum of Commits</h4>
       <div class="spec" tabindex="0" role="group" aria-label="Spectrum of Commits; use the arrow keys, the wheel or a drag to move through the months">
-        <svg viewBox="0 0 ${W} ${H}" style="width:${W}px" role="img" aria-label="Commits per week in ${d.year}. Base peak ${peak} in the week of ${esc(d.dates[bi])}."><title>Commits in ${d.year}</title>${sp}</svg>
+        <svg viewBox="0 0 ${W} ${H}" style="width:${W}px" role="img" aria-label="Commits per week in ${d.year}. Base peak ${peak} in the week of ${esc(weekStart(d, bi))}."><title>Commits in ${d.year}</title>${sp}</svg>
       </div>
       <span class="sr">${esc(alt)}</span>
       <h4>Repositories as atoms</h4>
@@ -130,7 +135,7 @@ class GhActivity extends HTMLElement {
     const tip = this.root.querySelector('.tip');
     const setPeak = (i) => {
       this.root.querySelectorAll('.peak,.cap').forEach((n) => n.classList.toggle('on', Number(n.dataset.i) === i));
-      if (i != null) tip.innerHTML = `<strong>Week of ${esc(d.dates[i])}</strong>: ${d.weeks[i]} commit${d.weeks[i] === 1 ? '' : 's'}`;
+      if (i != null) tip.innerHTML = `<strong>Week of ${esc(weekStart(d, i))}</strong>: ${d.weeks[i]} commit${d.weeks[i] === 1 ? '' : 's'}`;
     };
 
     // The spectrum starts at the present and moves sideways: wheel, drag with the mouse, swipe, or the arrow keys when focused.
@@ -154,17 +159,37 @@ class GhActivity extends HTMLElement {
 
     // The week under the pointer comes from the pointer's position, not from the element it entered, so it also follows the
     // wheel, a drag and a swipe while the pointer rests, which browsers do not report as pointer events.
+    const band = spec.querySelector('.band'), flag = spec.querySelector('.flag');
+    const flagBox = flag.querySelector('rect'), flagText = flag.querySelector('text');
+    const baseLabel = spec.querySelector('.base');
+    const place = (i) => {
+      baseLabel?.setAttribute('opacity', i === bi ? '0' : '1'); // the label of the week takes its place
+      band.setAttribute('opacity', i === null ? '0' : '1');
+      flag.setAttribute('opacity', i === null ? '0' : '1');
+      if (i === null) return;
+      band.setAttribute('x', x(i) - WEEK_PX / 2);
+      flagText.textContent = `Week of ${weekStart(d, i)}: ${d.weeks[i]} commit${d.weeks[i] === 1 ? '' : 's'}`;
+      const w = flagText.getBBox().width + 16;
+      const left = flagLeft({ center: x(i), width: w, from: spec.scrollLeft, to: spec.scrollLeft + spec.clientWidth });
+      flagBox.setAttribute('x', left);
+      flagBox.setAttribute('width', w);
+      flagText.setAttribute('x', left + 8);
+    };
     let pointerX = null;
     let shown = null;
     const hover = () => {
       const i = pointerX === null ? null : weekAt({ x: pointerX, left: spec.getBoundingClientRect().left, scrollLeft: spec.scrollLeft, n });
-      if (i === shown) return;
-      shown = i;
-      setPeak(i);
+      if (i !== shown) { shown = i; setPeak(i); }
+      place(i); // also while the spectrum moves under a pointer that rests: the label keeps inside the visible part
     };
     let drag = null;
     const endDrag = () => { spec.classList.remove('drag'); drag = null; };
-    spec.addEventListener('pointerdown', (e) => { endDrag(); if (e.pointerType === 'mouse' && e.button === 0) drag = { x: e.clientX, left: spec.scrollLeft, moved: false }; });
+    spec.addEventListener('pointerdown', (e) => {
+      endDrag();
+      pointerX = e.clientX; // a press or a tap names the week too, which is how a touch screen reads it
+      hover();
+      if (e.pointerType === 'mouse' && e.button === 0) drag = { x: e.clientX, left: spec.scrollLeft, moved: false };
+    });
     spec.addEventListener('pointermove', (e) => {
       pointerX = e.clientX;
       if (drag && (e.buttons & 1) === 0) endDrag(); // the button was released where this element could not hear it
@@ -177,7 +202,7 @@ class GhActivity extends HTMLElement {
       }
       hover();
     });
-    spec.addEventListener('pointerleave', () => { pointerX = null; hover(); });
+    spec.addEventListener('pointerleave', (e) => { if (e.pointerType !== 'touch') { pointerX = null; hover(); } });
     spec.addEventListener('scroll', hover);
     ['pointerup', 'pointercancel', 'lostpointercapture'].forEach((t) => spec.addEventListener(t, endDrag));
 

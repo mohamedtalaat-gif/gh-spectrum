@@ -6,7 +6,7 @@ It is one custom element, `<gh-activity>`, with no dependencies and no build ste
 
 ```html
 <gh-activity user="your-github-login"></gh-activity>
-<script type="module" src="https://cdn.jsdelivr.net/gh/mohamedtalaat-gif/gh-spectrum@1.3.1/src/gh-spectrum.js"></script>
+<script type="module" src="https://cdn.jsdelivr.net/gh/mohamedtalaat-gif/gh-spectrum@1.4.0/src/gh-spectrum.js"></script>
 ```
 
 The element loads `core.js` from the same folder, so serve both files together. A page opened from `file://` cannot load ES modules; use any static server for local work (`npx serve`, `python3 -m http.server`).
@@ -21,16 +21,16 @@ The element loads `core.js` from the same folder, so serve both files together. 
 
 ## Moving through the months
 
-The spectrum opens at the present. Turn the mouse wheel over it, drag it with the mouse, swipe it on a touch screen, or focus it and use the arrow keys (four weeks a step), Page Up and Page Down, Home and End. At either end the wheel hands over to the page, so the page keeps scrolling. The week under the pointer is highlighted and described below the card, and it follows the wheel and a drag while the pointer rests. The spectrum is a keyboard-focusable region with a label for screen readers, and the weekly counts are also available to them as text.
+The spectrum opens at the present. Turn the mouse wheel over it, drag it with the mouse, swipe it on a touch screen, or focus it and use the arrow keys (four weeks a step), Page Up and Page Down, Home and End. At either end the wheel hands over to the page, so the page keeps scrolling. The week under the pointer is marked on the spectrum itself: a tinted column, a label with the date and the number of commits, and the peak in the hot colour. The label stays inside the visible part, the same text appears below the card, and it all follows the wheel and a drag while the pointer rests. A tap on a touch screen names a week too. The spectrum is a keyboard-focusable region with a label for screen readers, and the weekly counts are also available to them as text.
 
-Colours and the font come from custom properties set on the element: `--ghs-text`, `--ghs-muted`, `--ghs-rule`, `--ghs-bg`, `--ghs-accent`, `--ghs-hot`, `--ghs-font`.
+Colours and the font come from custom properties set on the element: `--ghs-text`, `--ghs-muted`, `--ghs-rule`, `--ghs-bg`, `--ghs-accent`, `--ghs-hot`, `--ghs-font`, and `--ghs-flag-bg` for the background of the label (it follows `--ghs-bg` when that is set).
 
 ## As an image for a profile README
 
 A README cannot run a web component, so the command line writes the card as an SVG, in a dark and a light version.
 
 ```bash
-GITHUB_TOKEN=... npx github:mohamedtalaat-gif/gh-spectrum#1.3.1 your-login --out-dir cards --show repos
+GITHUB_TOKEN=... npx github:mohamedtalaat-gif/gh-spectrum#1.4.0 your-login --out-dir cards --show repos
 # writes cards/gh-spectrum-dark.svg and cards/gh-spectrum-light.svg
 ```
 

@@ -82,6 +82,17 @@ export function weekAt({ x, left, scrollLeft, n }) {
   return i >= 0 && i < n ? i : null;
 }
 
+/** Left edge of the label that names the week under the pointer: centred on the week, kept inside the visible part of the spectrum. */
+export function flagLeft({ center, width, from, to, margin = 4 }) {
+  return Math.max(from + margin, Math.min(center - width / 2, to - width - margin));
+}
+
+/** The date a week is named by: its Sunday, except that the first week of the year starts on 1 January (the days before it are not counted). */
+export function weekStart(d, i) {
+  const jan1 = `${d.year}-01-01`;
+  return d.dates[i] < jan1 ? jan1 : d.dates[i];
+}
+
 /** Radius of a repository atom: grows with the square root of recent commits and stars. */
 export const atomRadius = (rep) => 13 + Math.sqrt(rep.commits * 1.6 + rep.stars * 6 + 1) * 3.4;
 

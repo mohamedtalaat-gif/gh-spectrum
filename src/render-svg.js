@@ -1,6 +1,6 @@
 // The card as a static SVG image, for places that cannot run scripts, such as a GitHub profile README.
 // Pure: data in, string out. The interactive version is the <gh-activity> element.
-import { colourFor, esc, layoutAtoms, monthTicks, slotX } from './core.js';
+import { colourFor, esc, layoutAtoms, monthTicks, slotX, weekStart } from './core.js';
 
 export const THEMES = {
   dark: { bg: '#0e131c', border: '#2a3547', text: '#e1e8f2', muted: '#93a3ba', accent: '#5b8dff', hot: '#f08a4b' },
@@ -83,7 +83,7 @@ export function renderCardSvg(d, { theme = 'dark', show = ['repos', 'commits', '
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-labelledby="t d">
 <title id="t">GitHub activity of ${esc(d.user)}</title>
-<desc id="d">Commits per week in ${d.year}, base peak ${peak} in the week of ${esc(d.dates[bi])}, and ${d.repos.length} repositories drawn as atoms.</desc>
+<desc id="d">Commits per week in ${d.year}, base peak ${peak} in the week of ${esc(weekStart(d, bi))}, and ${d.repos.length} repositories drawn as atoms.</desc>
 <style>text{font-family:${FONT}} .t{fill:${c.text};font-size:12px} .m{fill:${c.muted};font-size:11px} .h{fill:${c.text};font-size:19px;font-weight:600} .s{fill:${c.muted};font-size:14px}</style>
 <rect x="0.5" y="0.5" width="${W - 1}" height="${H - 1}" rx="10" fill="${c.bg}" stroke="${c.border}"/>
 <text x="${PAD}" y="${y1}" class="h">github.com/${esc(d.user)}</text>
