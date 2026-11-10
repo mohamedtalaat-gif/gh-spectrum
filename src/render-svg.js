@@ -1,6 +1,6 @@
 // The card as a static SVG image, for places that cannot run scripts, such as a GitHub profile README.
 // Pure: data in, string out. The interactive version is the <gh-activity> element.
-import { colourFor, esc, layoutAtoms } from './core.js';
+import { colourFor, esc, layoutAtoms, monthTicks, slotX } from './core.js';
 
 export const THEMES = {
   dark: { bg: '#0e131c', border: '#2a3547', text: '#e1e8f2', muted: '#93a3ba', accent: '#5b8dff', hot: '#f08a4b' },
@@ -33,11 +33,13 @@ export function renderCardSvg(d, { theme = 'dark', show = ['repos', 'commits', '
 
   // spectrum block
   const SH = 150, SB = 24, ST = 22;
-  const sx = (i) => 6 + (i / 51) * (IW - 12);
+  const n = d.weeks.length;
+  const sx = (i) => slotX(i, n, 6, IW - 6);
   const sy = (v) => SH - SB - (v / peak) * (SH - SB - ST);
   let spec = `<line x1="0" x2="${IW}" y1="${SH - SB}" y2="${SH - SB}" stroke="${c.border}"/>`;
-  for (let i = 0; i < 52; i += 13) spec += `<text x="${sx(i).toFixed(1)}" y="${SH - 6}" text-anchor="middle" class="m">${esc(d.dates[i].slice(0, 7))}</text>`;
-  spec += `<text x="${sx(51).toFixed(1)}" y="${SH - 6}" text-anchor="end" class="m">now</text>`;
+  const ticks = monthTicks(d);
+  ticks.forEach((t) => { spec += `<line x1="${sx(t.i).toFixed(1)}" x2="${sx(t.i).toFixed(1)}" y1="${SH - SB}" y2="${SH - SB + 4}" stroke="${c.border}"/><text x="${sx(t.i).toFixed(1)}" y="${SH - 6}" text-anchor="${t.i < 1 ? 'start' : 'middle'}" class="m">${esc(t.label)}</text>`; });
+  if (!ticks.length || sx(n - 1) - sx(ticks.at(-1).i) > 40) spec += `<text x="${sx(n - 1).toFixed(1)}" y="${SH - 6}" text-anchor="end" class="m">now</text>`;
   d.weeks.forEach((v, i) => {
     if (v > 0) spec += `<line x1="${sx(i).toFixed(1)}" x2="${sx(i).toFixed(1)}" y1="${SH - SB}" y2="${sy(v).toFixed(1)}" stroke="${c.accent}" stroke-width="2" stroke-linecap="round"/><circle cx="${sx(i).toFixed(1)}" cy="${sy(v).toFixed(1)}" r="2.6" fill="${c.accent}"/>`;
   });
@@ -66,7 +68,7 @@ export function renderCardSvg(d, { theme = 'dark', show = ['repos', 'commits', '
   }).join('');
 
   const totals = [
-    show.includes('commits') ? `${total} commits in 52 weeks` : '',
+    show.includes('commits') ? `${total} commits in ${d.year}` : '',
     show.includes('repos') ? `${d.repos.length} repositories` : '',
     show.includes('stars') ? `${stars} stars` : '',
   ].filter(Boolean).join('   ');
@@ -81,17 +83,17 @@ export function renderCardSvg(d, { theme = 'dark', show = ['repos', 'commits', '
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-labelledby="t d">
 <title id="t">GitHub activity of ${esc(d.user)}</title>
-<desc id="d">Weekly commits over the last 52 weeks, base peak ${peak} in the week of ${esc(d.dates[bi])}, and ${d.repos.length} repositories drawn as atoms.</desc>
+<desc id="d">Commits per week in ${d.year}, base peak ${peak} in the week of ${esc(d.dates[bi])}, and ${d.repos.length} repositories drawn as atoms.</desc>
 <style>text{font-family:${FONT}} .t{fill:${c.text};font-size:12px} .m{fill:${c.muted};font-size:11px} .h{fill:${c.text};font-size:19px;font-weight:600} .s{fill:${c.muted};font-size:14px}</style>
 <rect x="0.5" y="0.5" width="${W - 1}" height="${H - 1}" rx="10" fill="${c.bg}" stroke="${c.border}"/>
 <text x="${PAD}" y="${y1}" class="h">github.com/${esc(d.user)}</text>
 <text x="${W - PAD}" y="${y1}" text-anchor="end" class="s">${esc(totals)}</text>
-<text x="${PAD}" y="${y2}" class="s">Spectrum of weekly commits</text>
+<text x="${PAD}" y="${y2}" class="s">Spectrum of Commits</text>
 <g transform="translate(${PAD} ${y3})">${spec}</g>
 <text x="${PAD}" y="${y4}" class="s">Repositories as atoms</text>
 <g transform="translate(${PAD} ${y5})">${atoms}</g>
 <g transform="translate(${PAD} ${y6})">${legend}</g>
-<text x="${PAD}" y="${H - 16}" class="m">Data: GitHub REST API${updated ? `, ${esc(updated)}` : ''}. Radius reflects commits in the last 52 weeks plus stars; bonds join repositories that share a language.</text>
+<text x="${PAD}" y="${H - 16}" class="m">Data: GitHub REST API${updated ? `, ${esc(updated)}` : ''}. Radius reflects commits in ${d.year} plus stars; bonds join repositories that share a language.</text>
 </svg>
 `;
 }

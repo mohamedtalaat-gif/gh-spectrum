@@ -1,11 +1,13 @@
 // Fetches the activity of one GitHub user from the public REST API. Works in browsers and in Node 18 or newer.
-import { weekGrid, binCommits } from './core.js';
+import { yearGrid, binCommits } from './core.js';
 
 const API = 'https://api.github.com';
 
 /**
- * Returns { user, weeks, dates, repos }: commits per week over 52 weeks (summed across the repositories) and one record
- * per public, non-fork repository. `token` (optional) raises the rate limit; `fetchFn` and `now` exist for tests.
+ * Returns { user, year, through, weeks, dates, repos }: commits per week from the first week of the current year up to
+ * today (summed across the repositories) and one record per public, non-fork repository. The list of repositories is read
+ * from the account every time, so it grows and shrinks with the account. `include` (optional) limits it to named
+ * repositories. `token` (optional) raises the rate limit; `fetchFn` and `now` exist for tests.
  */
 export async function fetchActivity({ user, include = null, token = null, fetchFn = globalThis.fetch, now = new Date() }) {
   const headers = { Accept: 'application/vnd.github+json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
@@ -15,14 +17,20 @@ export async function fetchActivity({ user, include = null, token = null, fetchF
     return r.json();
   };
 
-  const repos = (await getJson(`${API}/users/${user}/repos?per_page=100&sort=pushed`)).filter(
-    (r) => !r.fork && r.name !== user && (!include || include.includes(r.name))
-  );
-  const { start, dates } = weekGrid(now);
-  const since = new Date(start).toISOString();
-  const weeks = new Array(52).fill(0);
+  // Every page of the account's public repositories, a hundred at a time.
+  const listed = [];
+  for (let page = 1; page <= 10; page++) {
+    const chunk = await getJson(`${API}/users/${user}/repos?per_page=100&sort=pushed&page=${page}`);
+    listed.push(...chunk);
+    if (chunk.length < 100) break;
+  }
+  const repos = listed.filter((r) => !r.fork && r.name !== user && (!include || include.includes(r.name)));
 
-  // Commit dates of one repository over the last year, read a hundred at a time, at most five pages.
+  const grid = yearGrid(now);
+  const since = new Date(grid.jan1).toISOString();
+  const weeks = new Array(grid.weeks).fill(0);
+
+  // Commit dates of one repository since 1 January, read a hundred at a time, at most five pages.
   const commitDates = async (name) => {
     const out = [];
     for (let page = 1; page <= 5; page++) {
@@ -36,7 +44,7 @@ export async function fetchActivity({ user, include = null, token = null, fetchF
 
   const detail = await Promise.all(
     repos.map(async (r) => {
-      const bins = binCommits(await commitDates(r.name), start);
+      const bins = binCommits(await commitDates(r.name), grid.start, grid.weeks, grid.jan1);
       bins.forEach((n, i) => (weeks[i] += n));
       return {
         name: r.name,
@@ -49,5 +57,12 @@ export async function fetchActivity({ user, include = null, token = null, fetchF
       };
     })
   );
-  return { user, weeks, dates, repos: detail.sort((a, b) => b.commits - a.commits || b.stars - a.stars) };
+  return {
+    user,
+    year: grid.year,
+    through: grid.through,
+    weeks,
+    dates: grid.dates,
+    repos: detail.sort((a, b) => b.commits - a.commits || b.stars - a.stars),
+  };
 }

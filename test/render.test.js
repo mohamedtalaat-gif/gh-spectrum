@@ -2,13 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fetchActivity } from '../src/data.js';
 import { renderCardSvg, THEMES } from '../src/render-svg.js';
-import { weekGrid } from '../src/core.js';
+import { yearGrid } from '../src/core.js';
 
 const NOW = new Date('2026-11-10T12:00:00Z');
-const { dates } = weekGrid(NOW);
+const grid = yearGrid(NOW);
+const { dates } = grid;
 
 const fixture = () => ({
   user: 'someone',
+  year: grid.year,
+  through: grid.through,
   dates,
   weeks: dates.map((_, i) => (i % 5 === 0 ? i + 1 : 0)),
   repos: [
@@ -32,6 +35,24 @@ test('the card is a finished SVG with the numbers of the data', () => {
   assert.match(svg, /2026-11-10/);
 });
 
+test('the spectrum is titled Spectrum of Commits, runs from the start of the year and says no more than that', () => {
+  const svg = renderCardSvg(fixture());
+  assert.match(svg, />Spectrum of Commits</);
+  assert.doesNotMatch(svg, /weekly|52 weeks|last year/i);
+  assert.match(svg, />2026</); // the January tick carries the year
+  for (const m of ['Feb', 'Jun', 'Nov']) assert.match(svg, new RegExp(`>${m}<`));
+  assert.doesNotMatch(svg, />2025/);
+  assert.match(svg, /commits in 2026/);
+});
+
+test('a week into the year still draws, with the weeks at the width of a 13-week axis', () => {
+  const g = yearGrid(new Date('2026-01-03T12:00:00Z'));
+  const d = { ...fixture(), year: g.year, through: g.through, dates: g.dates, weeks: [4] };
+  const svg = renderCardSvg(d);
+  assert.doesNotMatch(svg, /NaN|undefined|Infinity/);
+  assert.match(svg, /base peak: 4/);
+});
+
 test('repository names are escaped', () => {
   const svg = renderCardSvg(fixture());
   assert.doesNotMatch(svg, /beta-<tool>/);
@@ -50,10 +71,10 @@ test('the two themes differ in colour and nothing else breaks', () => {
 test('the headline figures can be chosen', () => {
   const only = renderCardSvg(fixture(), { show: ['repos'] });
   assert.match(only, /3 repositories/);
-  assert.doesNotMatch(only, /commits in 52 weeks/);
+  assert.doesNotMatch(only, /\d+ commits in 2026/);
   assert.doesNotMatch(only, /\d+ stars/);
   const all = renderCardSvg(fixture());
-  assert.match(all, /commits in 52 weeks/);
+  assert.match(all, /\d+ commits in 2026/);
   assert.match(all, /4 stars/);
 });
 
@@ -76,6 +97,7 @@ function fakeApi() {
     const u = new URL(url);
     const ok = (body) => ({ ok: true, status: 200, json: async () => body });
     if (u.pathname === '/users/someone/repos') {
+      if (Number(u.searchParams.get('page')) > 1) return ok([]);
       return ok([
         { name: 'alpha', fork: false, html_url: 'https://x/alpha', description: 'a', language: 'Python', stargazers_count: 2, pushed_at: '2026-11-09T00:00:00Z' },
         { name: 'forked', fork: true, html_url: 'x', description: '', language: 'C', stargazers_count: 9, pushed_at: '2026-11-09T00:00:00Z' },
@@ -102,12 +124,29 @@ test('fetchActivity skips forks and the profile repository, reads every page and
   assert.equal(d.repos[0].commits, 102);
   assert.equal(d.repos[1].commits, 0);
   assert.equal(d.repos[1].language, 'Other');
-  assert.equal(d.weeks.length, 52);
-  assert.equal(d.weeks[51], 100); // the 100 commits of the current week
-  assert.equal(d.weeks[50], 2); // two a week earlier
+  assert.equal(d.weeks.length, grid.weeks);
+  assert.equal(d.year, 2026);
+  assert.equal(d.weeks.at(-1), 100); // the 100 commits of the current week
+  assert.equal(d.weeks.at(-2), 2); // two a week earlier
   assert.equal(d.weeks.reduce((a, b) => a + b, 0), 102);
   assert.ok(calls.every((c) => c.auth === 'Bearer T'));
   assert.ok(calls.some((c) => c.url.includes('page=2')));
+  assert.ok(calls.filter((c) => c.url.includes('/commits?')).every((c) => c.url.includes('since=2026-01-01T00:00:00.000Z')));
+});
+
+test('the list of repositories follows the account: a second page of repositories is read and counted', async () => {
+  const many = Array.from({ length: 130 }, (_, i) => ({ name: `r${i}`, fork: i % 10 === 0, html_url: 'x', description: '', language: 'Python', stargazers_count: 0, pushed_at: '2026-11-01T00:00:00Z' }));
+  const urls = [];
+  const fn = async (url) => {
+    urls.push(url);
+    const u = new URL(url);
+    const ok = (body) => ({ ok: true, status: 200, json: async () => body });
+    if (u.pathname === '/users/many/repos') return ok(Number(u.searchParams.get('page')) === 1 ? many.slice(0, 100) : many.slice(100));
+    return ok([]);
+  };
+  const d = await fetchActivity({ user: 'many', fetchFn: fn, now: NOW });
+  assert.equal(d.repos.length, 130 - 13); // forks left out
+  assert.ok(urls.some((u) => u.includes('/users/many/repos') && u.includes('page=2')));
 });
 
 test('fetchActivity can be limited to named repositories and reports API errors', async () => {

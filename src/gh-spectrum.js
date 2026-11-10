@@ -1,18 +1,19 @@
 /*!
  * gh-spectrum: a GitHub activity card drawn like an analytical spectrum.
- * Weekly commits are stick peaks along a time axis (like a mass spectrum, base peak labelled);
+ * Commits per week are stick peaks along the year so far (like a mass spectrum, base peak labelled);
  * repositories are atoms sized by recent activity and coloured by language, bonded by shared language.
  * No dependencies. Data come from the public GitHub REST API in the visitor's browser and are cached for an hour.
  * MIT licence.
  */
-import { colourFor, esc, layoutAtoms } from './core.js';
+import { colourFor, esc, layoutAtoms, monthTicks, slotX } from './core.js';
 import { fetchActivity } from './data.js';
 
 const TTL = 60 * 60 * 1000;
 
 // The browser keeps the result for an hour so that a page with the card does not use up the visitor's API allowance.
+// The year is part of the key, so a new year starts from fresh data.
 async function load(user, include) {
-  const key = `gh-spectrum:${user}`;
+  const key = `gh-spectrum:${new Date().getUTCFullYear()}:${user}:${include ? include.join(',') : '*'}`;
   try {
     const c = JSON.parse(localStorage.getItem(key) || 'null');
     if (c && Date.now() - c.at < TTL) return c.data;
@@ -80,11 +81,13 @@ class GhActivity extends HTMLElement {
 
     // spectrum
     const W = 720, H = 170, L = 8, B = 26, T = 22;
-    const x = (i) => L + 6 + (i / 51) * (W - L * 2 - 12);
+    const n = d.weeks.length;
+    const x = (i) => slotX(i, n, L + 6, W - L - 6);
     const y = (v) => H - B - (v / peak) * (H - B - T);
     let sp = `<line class="axis" x1="${L}" x2="${W - L}" y1="${H - B}" y2="${H - B}"/>`;
-    for (let i = 0; i < 52; i += 13) sp += `<text x="${x(i)}" y="${H - 8}" text-anchor="middle">${esc(d.dates[i].slice(0, 7))}</text>`;
-    sp += `<text x="${x(51)}" y="${H - 8}" text-anchor="end">now</text>`;
+    const ticks = monthTicks(d);
+    ticks.forEach((t) => { sp += `<line class="axis" x1="${x(t.i)}" x2="${x(t.i)}" y1="${H - B}" y2="${H - B + 4}"/><text x="${x(t.i)}" y="${H - 8}" text-anchor="${t.i < 1 ? 'start' : 'middle'}">${esc(t.label)}</text>`; });
+    if (!ticks.length || x(n - 1) - x(ticks.at(-1).i) > 40) sp += `<text x="${x(n - 1)}" y="${H - 8}" text-anchor="end">now</text>`;
     d.weeks.forEach((v, i) => {
       if (v > 0) sp += `<line class="peak" data-i="${i}" x1="${x(i)}" x2="${x(i)}" y1="${H - B}" y2="${y(v)}"/><circle class="cap" data-i="${i}" cx="${x(i)}" cy="${y(v)}" r="2.6"/>`;
       sp += `<rect class="hit" data-i="${i}" x="${x(i) - 5}" y="${T - 6}" width="10" height="${H - B - T + 6}"/>`;
@@ -104,15 +107,15 @@ class GhActivity extends HTMLElement {
     const alt = d.weeks.map((v, i) => `${d.dates[i]}: ${v}`).join('; ');
     this.root.querySelector('.card').innerHTML = `
       <header><a href="https://github.com/${esc(d.user)}">github.com/${esc(d.user)}</a>
-        <span class="totals">${this.show.includes('commits') ? `<span><strong>${total}</strong> commits in 52 weeks</span>` : ''}${this.show.includes('repos') ? `<span><strong>${d.repos.length}</strong> repositories</span>` : ''}${this.show.includes('stars') ? `<span><strong>${stars}</strong> stars</span>` : ''}</span></header>
-      <h4>Spectrum of weekly commits</h4>
-      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Weekly commit counts for the last 52 weeks. Base peak ${peak} in the week of ${esc(d.dates[bi])}."><title>Weekly commits</title>${sp}</svg>
+        <span class="totals">${this.show.includes('commits') ? `<span><strong>${total}</strong> commits in ${d.year}</span>` : ''}${this.show.includes('repos') ? `<span><strong>${d.repos.length}</strong> repositories</span>` : ''}${this.show.includes('stars') ? `<span><strong>${stars}</strong> stars</span>` : ''}</span></header>
+      <h4>Spectrum of Commits</h4>
+      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Commits per week in ${d.year}. Base peak ${peak} in the week of ${esc(d.dates[bi])}."><title>Commits in ${d.year}</title>${sp}</svg>
       <span class="sr">${esc(alt)}</span>
       <h4>Repositories as atoms</h4>
       <svg viewBox="0 0 ${AW} ${AH}" role="group" aria-label="Repositories; radius grows with recent commits and stars">${at}</svg>
       <div class="chips" role="group" aria-label="Filter by language">${langs.map((l) => `<button type="button" class="chip" aria-pressed="false" data-l="${esc(l)}"><i style="background:${colour(l)}"></i>${esc(l)}</button>`).join('')}</div>
       <div class="tip" aria-live="polite">Hover a peak or an atom.</div>
-      <p class="note">Data: GitHub REST API, requested by your browser and cached for an hour. Radius reflects commits in the last 52 weeks plus stars; bonds join repositories that share a language.</p>`;
+      <p class="note">Data: GitHub REST API, requested by your browser and cached for an hour. Radius reflects commits in ${d.year} plus stars; bonds join repositories that share a language.</p>`;
 
     const tip = this.root.querySelector('.tip');
     const setPeak = (i) => {
@@ -122,7 +125,8 @@ class GhActivity extends HTMLElement {
     this.root.querySelectorAll('.hit').forEach((h) => { h.addEventListener('pointerenter', () => setPeak(Number(h.dataset.i))); });
     this.root.querySelectorAll('.atom').forEach((a) => {
       const rep = d.repos.find((q) => q.name === a.dataset.n);
-      const show = () => (tip.innerHTML = `<strong>${esc(rep.name)}</strong> (${esc(rep.language)}): ${esc(rep.description) || 'no description'}. ${rep.commits} commits in 52 weeks, ${rep.stars} star${rep.stars === 1 ? '' : 's'}, last push ${esc(rep.pushed.slice(0, 10))}.`);
+      const about = (rep.description || 'no description').replace(/[.\s]+$/, '');
+      const show = () => (tip.innerHTML = `<strong>${esc(rep.name)}</strong> (${esc(rep.language)}): ${esc(about)}. ${rep.commits} commits in ${d.year}, ${rep.stars} star${rep.stars === 1 ? '' : 's'}, last push ${esc(rep.pushed.slice(0, 10))}.`);
       a.addEventListener('pointerenter', show);
       a.addEventListener('focus', show);
       a.addEventListener('click', () => (location.href = rep.url));

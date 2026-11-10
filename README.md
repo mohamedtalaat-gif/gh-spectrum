@@ -1,12 +1,12 @@
 # gh-spectrum
 
-A GitHub activity card that reads like an analytical spectrum. Weekly commits are stick peaks along a one-year time axis, as in a mass spectrum, with the base peak labelled. Each repository is an atom: its radius grows with recent commits and stars, its colour follows the primary language, and repositories that share a language are bonded. Language chips filter the atoms.
+A GitHub activity card that reads like an analytical spectrum. The spectrum of commits has one stick peak for every week of the current year, from the first week of January to today, as in a mass spectrum, with the base peak labelled. Each repository is an atom: its radius grows with its commits this year and its stars, its colour follows the primary language, and repositories that share a language are bonded. Language chips filter the atoms.
 
 It is one custom element, `<gh-activity>`, with no dependencies and no build step. The same card can also be written as a static SVG, for places that cannot run scripts, such as a GitHub profile README.
 
 ```html
 <gh-activity user="your-github-login"></gh-activity>
-<script type="module" src="https://cdn.jsdelivr.net/gh/mohamedtalaat-gif/gh-spectrum@1.0.0/src/gh-spectrum.js"></script>
+<script type="module" src="https://cdn.jsdelivr.net/gh/mohamedtalaat-gif/gh-spectrum@1.2.0/src/gh-spectrum.js"></script>
 ```
 
 The element loads `core.js` from the same folder, so serve both files together. A page opened from `file://` cannot load ES modules; use any static server for local work (`npx serve`, `python3 -m http.server`).
@@ -16,7 +16,7 @@ The element loads `core.js` from the same folder, so serve both files together. 
 | Attribute | Meaning | Default |
 |---|---|---|
 | `user` | GitHub login to draw | required |
-| `repos` | Comma-separated repository names to include | all public, non-fork repositories |
+| `repos` | Comma-separated repository names to include | every public, non-fork repository of the account, read from GitHub each time, so a new repository appears and a deleted one disappears without any edit |
 | `show` | Headline figures beside the login: any of `repos`, `commits`, `stars` | `repos,commits,stars` |
 
 Colours and the font come from custom properties set on the element: `--ghs-text`, `--ghs-muted`, `--ghs-rule`, `--ghs-bg`, `--ghs-accent`, `--ghs-hot`, `--ghs-font`.
@@ -26,7 +26,7 @@ Colours and the font come from custom properties set on the element: `--ghs-text
 A README cannot run a web component, so the command line writes the card as an SVG, in a dark and a light version.
 
 ```bash
-GITHUB_TOKEN=... npx github:mohamedtalaat-gif/gh-spectrum#1.1.0 your-login --out-dir cards --show repos
+GITHUB_TOKEN=... npx github:mohamedtalaat-gif/gh-spectrum#1.2.0 your-login --out-dir cards --show repos
 # writes cards/gh-spectrum-dark.svg and cards/gh-spectrum-light.svg
 ```
 
@@ -45,27 +45,27 @@ The README then picks the version that matches the reader's theme:
 <a href="https://example.org/where-the-interactive-card-lives">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://example.org/gh-spectrum-dark.svg">
-    <img alt="GitHub activity: weekly commits as a spectrum, repositories as atoms" src="https://example.org/gh-spectrum-light.svg" width="720">
+    <img alt="GitHub activity: commits as a spectrum, repositories as atoms" src="https://example.org/gh-spectrum-light.svg" width="720">
   </picture>
 </a>
 ```
 
-Host the two files anywhere that serves them over HTTPS, for instance on a GitHub Pages site that a scheduled workflow rebuilds once a week. That keeps the card current without adding commits to the profile repository. The static card has no hover; the interactive card is the element above.
+Host the two files anywhere that serves them over HTTPS, for instance on a GitHub Pages site that a scheduled workflow rebuilds every few hours (`cron: '17 */6 * * *'`). That keeps the card and the repository count current without adding commits to the profile repository. GitHub pauses a scheduled workflow after 60 days without activity in its repository, so a push now and then keeps it running. The static card has no hover; the interactive card is the element above.
 
 ## Why not a stats image
 
-A stats image is rendered on a server, cannot respond to the pointer and needs a token for anything private. This card runs in the visitor's browser against the public GitHub REST API, answers hover, focus and keyboard input, and keeps a text alternative of the weekly counts for screen readers.
+A stats image is rendered on a server, cannot respond to the pointer and needs a token for anything private. This card runs in the visitor's browser against the public GitHub REST API, answers hover, focus and keyboard input, and keeps a text alternative of the counts per week for screen readers.
 
 ## How it works
 
-- `GET /users/{user}/repos` lists the public, non-fork repositories.
-- `GET /repos/{user}/{repo}/commits?since=...` lists the commits of the last year, a hundred per page and at most five pages per repository. The dates are binned into 52 weeks that start on Sunday (UTC) and summed across repositories.
+- `GET /users/{user}/repos` lists the public, non-fork repositories, a hundred per page, up to ten pages. The repository that has the same name as the account (the profile README) is left out. Nothing in the card is a typed list: the repository count and the atoms follow the account.
+- `GET /repos/{user}/{repo}/commits?since=...` lists the commits since 1 January 00:00 UTC of the current year, a hundred per page and at most five pages per repository. The dates are binned into weeks that start on Sunday (UTC), beginning with the week that holds 1 January, and summed across repositories. Commits of the days before 1 January are not counted. Early in the year the weeks keep the width of a 13-week axis, so a few weeks do not stretch across the card.
 - The result is cached in `localStorage` for one hour. The unauthenticated API allows 60 requests an hour per visitor, which covers a profile with a handful of repositories. If the API does not answer, the card says so and links to the profile.
-- `src/data.js` fetches and bins the data for the element and the command line, `src/render-svg.js` draws the static card, and `src/core.js` holds the parts that need no browser: the week grid, the binning, the colour rule and the atom layout. `npm test` runs their tests in Node, the fetcher against a fake API.
+- `src/data.js` fetches and bins the data for the element and the command line, `src/render-svg.js` draws the static card, and `src/core.js` holds the parts that need no browser: the year grid, the binning, the month ticks, the colour rule and the atom layout. `npm test` runs their tests in Node, the fetcher against a fake API.
 
 ## Limits
 
-Commit counts come from the default branch of each repository, include every author and stop at 500 commits per repository. That suits personal repositories and over-counts shared ones. The language is GitHub's primary language for the repository. A repository with no commits in the last year is drawn at the minimum size.
+Commit counts come from the default branch of each repository, include every author and stop at 500 commits per repository. That suits personal repositories and over-counts shared ones. The language is GitHub's primary language for the repository. A repository with no commits this year is drawn at the minimum size. The year follows UTC, so the card changes to the new year at 00:00 UTC on 1 January.
 
 ## Development
 
