@@ -1,14 +1,19 @@
 {
   "name": "gh-spectrum",
-  "version": "1.0.0",
-  "description": "A GitHub activity card drawn like an analytical spectrum: weekly commits as stick peaks, repositories as atoms.",
+  "version": "1.1.0",
+  "description": "A GitHub activity card drawn like an analytical spectrum: weekly commits as stick peaks, repositories as atoms. A web component and a static SVG for profile READMEs.",
   "type": "module",
   "main": "src/gh-spectrum.js",
+  "bin": {
+    "gh-spectrum": "bin/gh-spectrum.js"
+  },
   "exports": {
     ".": "./src/gh-spectrum.js",
-    "./core": "./src/core.js"
+    "./core": "./src/core.js",
+    "./data": "./src/data.js",
+    "./svg": "./src/render-svg.js"
   },
-  "files": ["src"],
+  "files": ["src", "bin"],
   "scripts": {
     "test": "node --test"
   },

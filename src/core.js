@@ -30,8 +30,8 @@ export function binCommits(stamps, start, weeks = 52) {
 /** Radius of a repository atom: grows with the square root of recent commits and stars. */
 export const atomRadius = (rep) => 13 + Math.sqrt(rep.commits * 1.6 + rep.stars * 6 + 1) * 3.4;
 
-/** Places atoms on an expanding spiral, largest first, so that no two overlap. Deterministic. */
-export function layoutAtoms(repos, width, height) {
+/** Places atoms on an expanding spiral, largest first, so that no two overlap and `gap` is left between them. Deterministic. */
+export function layoutAtoms(repos, width, height, gap = 14) {
   const out = [];
   repos.forEach((rep, k) => {
     const r = atomRadius(rep);
@@ -40,7 +40,7 @@ export function layoutAtoms(repos, width, height) {
     for (let guard = 0; guard < 500; guard++) {
       const x = width / 2 + Math.cos(a) * dist * 1.55;
       const y = height / 2 + Math.sin(a) * dist;
-      if (out.every((p) => Math.hypot(p.x - x, p.y - y) > p.r + r + 14)) {
+      if (out.every((p) => Math.hypot(p.x - x, p.y - y) > p.r + r + gap)) {
         out.push({ x, y, r, rep });
         return;
       }

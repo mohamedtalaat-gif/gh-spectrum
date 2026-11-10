@@ -5,48 +5,19 @@
  * No dependencies. Data come from the public GitHub REST API in the visitor's browser and are cached for an hour.
  * MIT licence.
  */
-import { colourFor, esc, weekGrid, binCommits, layoutAtoms } from './core.js';
+import { colourFor, esc, layoutAtoms } from './core.js';
+import { fetchActivity } from './data.js';
 
-const API = 'https://api.github.com';
 const TTL = 60 * 60 * 1000;
 
-async function getJson(url) {
-  const r = await fetch(url, { headers: { Accept: 'application/vnd.github+json' } });
-  if (!r.ok) throw new Error(`${r.status} ${new URL(url).pathname}`);
-  return r.json();
-}
-
-// Commit dates of one repository over the last year, newest first, read page by page (up to 500 commits).
-async function commitDates(user, repo, since) {
-  const out = [];
-  for (let page = 1; page <= 5; page++) {
-    let chunk;
-    try { chunk = await getJson(`${API}/repos/${user}/${repo}/commits?since=${since}&per_page=100&page=${page}`); } catch { break; }
-    out.push(...chunk.map((c) => c.commit.author.date));
-    if (chunk.length < 100) break;
-  }
-  return out;
-}
-
+// The browser keeps the result for an hour so that a page with the card does not use up the visitor's API allowance.
 async function load(user, include) {
   const key = `gh-spectrum:${user}`;
   try {
     const c = JSON.parse(localStorage.getItem(key) || 'null');
     if (c && Date.now() - c.at < TTL) return c.data;
   } catch {}
-  const repos = (await getJson(`${API}/users/${user}/repos?per_page=100&sort=pushed`))
-    .filter((r) => !r.fork && r.name !== user && (!include || include.includes(r.name)));
-  const { start, dates } = weekGrid();
-  const weeks = new Array(52).fill(0);
-  const detail = await Promise.all(
-    repos.map(async (r) => {
-      const stamps = await commitDates(user, r.name, new Date(start).toISOString());
-      const bins = binCommits(stamps, start);
-      bins.forEach((n, i) => (weeks[i] += n));
-      return { name: r.name, url: r.html_url, description: r.description || '', language: r.language || 'Other', stars: r.stargazers_count, pushed: r.pushed_at, commits: bins.reduce((a, b) => a + b, 0) };
-    })
-  );
-  const data = { user, weeks, dates, repos: detail.sort((a, b) => b.commits - a.commits || b.stars - a.stars) };
+  const data = await fetchActivity({ user, include });
   try { localStorage.setItem(key, JSON.stringify({ at: Date.now(), data })); } catch {}
   return data;
 }
