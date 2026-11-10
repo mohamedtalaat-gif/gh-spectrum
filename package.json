@@ -1,0 +1,19 @@
+{
+  "name": "gh-spectrum",
+  "version": "1.0.0",
+  "description": "A GitHub activity card drawn like an analytical spectrum: weekly commits as stick peaks, repositories as atoms.",
+  "type": "module",
+  "main": "src/gh-spectrum.js",
+  "exports": {
+    ".": "./src/gh-spectrum.js",
+    "./core": "./src/core.js"
+  },
+  "files": ["src"],
+  "scripts": {
+    "test": "node --test"
+  },
+  "license": "MIT",
+  "author": "Muhammad Talaat",
+  "repository": "github:mohamedtalaat-gif/gh-spectrum",
+  "keywords": ["github", "web-component", "activity", "cheminformatics"]
+}
