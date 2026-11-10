@@ -6,7 +6,7 @@
  * No dependencies. Data come from the public GitHub REST API in the visitor's browser and are cached for an hour.
  * MIT licence.
  */
-import { colourFor, esc, layoutAtoms, monthTicks, weekX, spectrumWidth, WEEK_PX, wheelScroll, keyScroll } from './core.js';
+import { colourFor, esc, layoutAtoms, monthTicks, weekX, spectrumWidth, WEEK_PX, wheelScroll, keyScroll, weekAt } from './core.js';
 import { fetchActivity } from './data.js';
 
 const TTL = 60 * 60 * 1000;
@@ -44,7 +44,6 @@ svg text { font-family: inherit; font-size: 11px; fill: var(--ghs-muted, #93a3ba
 .spec.drag { cursor: grabbing; user-select: none; }
 .spec:focus-visible { outline: 2px solid var(--ghs-accent, #5b8dff); outline-offset: 2px; }
 .spec svg { max-width: none; overflow: visible; }
-.hit { fill: transparent; cursor: inherit; }
 .atom { cursor: pointer; transition: opacity 0.2s, transform 0.2s; transform-box: fill-box; transform-origin: center; }
 .atom:hover, .atom:focus { transform: scale(1.08); outline: none; }
 .atom.dim { opacity: 0.18; }
@@ -97,7 +96,6 @@ class GhActivity extends HTMLElement {
     if (!ticks.length || x(n - 1) - x(ticks.at(-1).i) > 40) sp += `<text x="${x(n - 1)}" y="${H - 8}" text-anchor="end">now</text>`;
     d.weeks.forEach((v, i) => {
       if (v > 0) sp += `<line class="peak" data-i="${i}" x1="${x(i)}" x2="${x(i)}" y1="${H - B}" y2="${y(v)}"/><circle class="cap" data-i="${i}" cx="${x(i)}" cy="${y(v)}" r="2.6"/>`;
-      sp += `<rect class="hit" data-i="${i}" x="${x(i) - WEEK_PX / 2}" y="${T - 6}" width="${WEEK_PX}" height="${H - B - T + 6}"/>`;
     });
     if (total) {
       const bx = x(bi), edge = bx > W - 70 ? 'end' : bx < 70 ? 'start' : 'middle'; // keep the label inside the picture
@@ -129,41 +127,60 @@ class GhActivity extends HTMLElement {
       <div class="tip" aria-live="polite">Hover a peak or an atom. Scroll or drag the spectrum to move through the months.</div>
       <p class="note">Data: GitHub REST API, requested by your browser and cached for an hour. Radius reflects commits in ${d.year} plus stars; bonds join repositories that share a language.</p>`;
 
-    // The spectrum starts at the present and moves sideways: wheel, drag with the mouse, swipe, or the arrow keys when focused.
-    const spec = this.root.querySelector('.spec');
-    const toNow = () => { spec.scrollLeft = spec.scrollWidth; };
-    toNow();
-    requestAnimationFrame(toNow);
-    spec.addEventListener('wheel', (e) => {
-      const next = wheelScroll({ deltaX: e.deltaX, deltaY: e.deltaY, deltaMode: e.deltaMode, scrollLeft: spec.scrollLeft, max: spec.scrollWidth - spec.clientWidth });
-      if (next === null) return; // at an end, or a sideways gesture: the browser does the rest
-      e.preventDefault();
-      spec.scrollLeft = next;
-    }, { passive: false });
-    spec.addEventListener('keydown', (e) => {
-      const next = keyScroll(e.key, { scrollLeft: spec.scrollLeft, max: spec.scrollWidth - spec.clientWidth, page: spec.clientWidth });
-      if (next === null) return;
-      e.preventDefault();
-      spec.scrollLeft = next;
-    });
-    let drag = null;
-    spec.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse' && e.button === 0) drag = { x: e.clientX, left: spec.scrollLeft, moved: false }; });
-    spec.addEventListener('pointermove', (e) => {
-      if (!drag) return;
-      const dx = e.clientX - drag.x;
-      if (!drag.moved && Math.abs(dx) < 4) return; // a click or a hover is not a drag
-      if (!drag.moved) { drag.moved = true; spec.classList.add('drag'); spec.setPointerCapture(e.pointerId); }
-      spec.scrollLeft = drag.left - dx;
-    });
-    const endDrag = () => { if (drag?.moved) spec.classList.remove('drag'); drag = null; };
-    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach((t) => spec.addEventListener(t, endDrag));
-
     const tip = this.root.querySelector('.tip');
     const setPeak = (i) => {
       this.root.querySelectorAll('.peak,.cap').forEach((n) => n.classList.toggle('on', Number(n.dataset.i) === i));
       if (i != null) tip.innerHTML = `<strong>Week of ${esc(d.dates[i])}</strong>: ${d.weeks[i]} commit${d.weeks[i] === 1 ? '' : 's'}`;
     };
-    this.root.querySelectorAll('.hit').forEach((h) => { h.addEventListener('pointerenter', () => setPeak(Number(h.dataset.i))); });
+
+    // The spectrum starts at the present and moves sideways: wheel, drag with the mouse, swipe, or the arrow keys when focused.
+    const spec = this.root.querySelector('.spec');
+    const max = () => spec.scrollWidth - spec.clientWidth;
+    const toNow = () => { spec.scrollLeft = spec.scrollWidth; };
+    toNow();
+    requestAnimationFrame(toNow);
+    spec.addEventListener('wheel', (e) => {
+      const next = wheelScroll({ deltaX: e.deltaX, deltaY: e.deltaY, deltaMode: e.deltaMode, scrollLeft: spec.scrollLeft, max: max() });
+      if (next === null) return; // at an end, or a sideways gesture: the browser does the rest
+      e.preventDefault();
+      spec.scrollLeft = next;
+    }, { passive: false });
+    spec.addEventListener('keydown', (e) => {
+      const next = keyScroll(e.key, { scrollLeft: spec.scrollLeft, max: max(), page: spec.clientWidth });
+      if (next === null) return;
+      e.preventDefault();
+      spec.scrollLeft = next;
+    });
+
+    // The week under the pointer comes from the pointer's position, not from the element it entered, so it also follows the
+    // wheel, a drag and a swipe while the pointer rests, which browsers do not report as pointer events.
+    let pointerX = null;
+    let shown = null;
+    const hover = () => {
+      const i = pointerX === null ? null : weekAt({ x: pointerX, left: spec.getBoundingClientRect().left, scrollLeft: spec.scrollLeft, n });
+      if (i === shown) return;
+      shown = i;
+      setPeak(i);
+    };
+    let drag = null;
+    const endDrag = () => { spec.classList.remove('drag'); drag = null; };
+    spec.addEventListener('pointerdown', (e) => { endDrag(); if (e.pointerType === 'mouse' && e.button === 0) drag = { x: e.clientX, left: spec.scrollLeft, moved: false }; });
+    spec.addEventListener('pointermove', (e) => {
+      pointerX = e.clientX;
+      if (drag && (e.buttons & 1) === 0) endDrag(); // the button was released where this element could not hear it
+      if (drag) {
+        const dx = e.clientX - drag.x;
+        if (drag.moved || Math.abs(dx) >= 4) { // a click or a hover is not a drag
+          if (!drag.moved) { drag.moved = true; spec.classList.add('drag'); spec.setPointerCapture(e.pointerId); }
+          spec.scrollLeft = drag.left - dx;
+        }
+      }
+      hover();
+    });
+    spec.addEventListener('pointerleave', () => { pointerX = null; hover(); });
+    spec.addEventListener('scroll', hover);
+    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach((t) => spec.addEventListener(t, endDrag));
+
     this.root.querySelectorAll('.atom').forEach((a) => {
       const rep = d.repos.find((q) => q.name === a.dataset.n);
       const about = (rep.description || 'no description').replace(/[.\s]+$/, '');

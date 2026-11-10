@@ -76,6 +76,12 @@ export function keyScroll(key, { scrollLeft, max, page }) {
   return to === undefined ? null : Math.min(max, Math.max(0, to));
 }
 
+/** The week under a pointer at client position `x` over a spectrum whose left edge is at `left`, or null outside the weeks. */
+export function weekAt({ x, left, scrollLeft, n }) {
+  const i = Math.round((x - left + scrollLeft - SPEC_PAD) / WEEK_PX);
+  return i >= 0 && i < n ? i : null;
+}
+
 /** Radius of a repository atom: grows with the square root of recent commits and stars. */
 export const atomRadius = (rep) => 13 + Math.sqrt(rep.commits * 1.6 + rep.stars * 6 + 1) * 3.4;
 

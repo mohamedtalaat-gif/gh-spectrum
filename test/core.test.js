@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { yearGrid, binCommits, monthTicks, slotX, weekX, spectrumWidth, wheelScroll, keyScroll, WEEK_PX, SPEC_PAD, layoutAtoms, atomRadius, colourFor, esc, WEEK } from '../src/core.js';
+import { yearGrid, binCommits, monthTicks, slotX, weekX, spectrumWidth, wheelScroll, keyScroll, weekAt, WEEK_PX, SPEC_PAD, layoutAtoms, atomRadius, colourFor, esc, WEEK } from '../src/core.js';
 
 test('yearGrid starts in the week of 1 January and ends in the week of today', () => {
   const g = yearGrid(new Date('2026-11-10T15:00:00Z')); // a Tuesday; 1 January 2026 was a Thursday
@@ -79,6 +79,18 @@ test('the keys move the focused spectrum and stay inside it', () => {
   assert.equal(k('Home', 300), 0);
   assert.equal(k('End', 300), 600);
   assert.equal(k('a', 300), null); // other keys are left alone
+});
+
+test('the week under the pointer follows its position and the scroll position', () => {
+  const at = (x, scrollLeft = 200) => weekAt({ x, left: 100, scrollLeft, n: 46 });
+  const x5 = 100 + weekX(5) - 200; // where week 5 is drawn while the spectrum is scrolled by 200
+  assert.equal(at(x5), 5);
+  assert.equal(at(x5 + WEEK_PX / 2 - 1), 5); // anywhere in the column of the week
+  assert.equal(at(x5 + WEEK_PX / 2 + 1), 6);
+  assert.equal(at(x5, 200 + WEEK_PX), 6); // the wheel moved the spectrum under a pointer that did not move
+  assert.equal(at(100 + weekX(0) - 400, 400), 0);
+  assert.equal(at(100 - 300, 0), null); // left of the first week
+  assert.equal(weekAt({ x: 100 + weekX(46), left: 100, scrollLeft: 0, n: 46 }), null); // after the last week
 });
 
 test('atoms never overlap and grow with commits and stars', () => {
